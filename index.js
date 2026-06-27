@@ -33,6 +33,44 @@ async function run() {
     const reportsCollection = database.collection("reports");
     const sessionCollection = database.collection("session");
 
+    // Middleware: Verify Token
+    const verifyToken = async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      const token = authHeader.split(" ")[1];
+
+      const session = await sessionCollection.findOne({ token: token });
+      if (!session) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+
+      const user = await usersCollection.findOne({ _id: session.userId });
+      if (!user) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+
+      req.user = user;
+      next();
+    };
+
+    // Middleware: Verify Admin
+    const verifyAdmin = (req, res, next) => {
+      if (req.user?.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    // Middleware: Verify User
+    const verifyUser = (req, res, next) => {
+      if (!req.user) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      next();
+    };
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
