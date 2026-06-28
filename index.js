@@ -360,6 +360,32 @@ async function run() {
       res.send(result);
     });
 
+    //comment related api
+
+    app.get("/api/comments", async (req, res) => {
+      const { lessonId } = req.query;
+      const result = await commentsCollection
+        .find({ lessonId })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
+    app.post("/api/comments", verifyToken, async (req, res) => {
+      const { lessonId, text } = req.body;
+      const newComment = {
+        lessonId,
+        text,
+        userId: req.user._id.toString(),
+        userName: req.user.name,
+        userPhoto: req.user.photoURL || "",
+        createdAt: new Date(),
+      };
+
+      const result = await commentsCollection.insertOne(newComment);
+      res.send(result);
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
