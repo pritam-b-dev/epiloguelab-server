@@ -78,6 +78,14 @@ async function run() {
       try {
         const query = { visibility: "public" };
 
+        //filter search
+        if (req.query.search) {
+          query.$or = [
+            { title: { $regex: req.query.search, $options: "i" } },
+            { description: { $regex: req.query.search, $options: "i" } },
+          ];
+        }
+        //by category
         if (req.query.category) {
           query.category = req.query.category;
         }
@@ -93,12 +101,34 @@ async function run() {
           query.creatorId = creatorId;
         }
 
-        //filter search
-        if (req.query.search) {
-          query.$or = [
-            { title: { $regex: req.query.search, $options: "i" } },
-            { description: { $regex: req.query.search, $options: "i" } },
-          ];
+        // Sort logic
+        const sortObj =
+          req.query.sort === "mostSaved"
+            ? { likesCount: -1 }
+            : { createdAt: -1 };
+
+        // Pagination logic
+        if (req.query.page) {
+          const page = parseInt(req.query.page);
+          const perPage = parseInt(req.query.perPage) || 6;
+          const skipItems = (page - 1) * perPage;
+
+          const total = await lessonsCollection.countDocuments(query);
+          const lessons = await lessonsCollection
+            .find(query)
+            .sort(sortObj)
+            .skip(skipItems)
+            .limit(perPage)
+            .toArray();
+
+          res.send({ lessons, total });
+        } else {
+          // if no page
+          const result = await lessonsCollection
+            .find(query)
+            .sort(sortObj)
+            .toArray();
+          res.send(result);
         }
 
         const lessons = await lessonsCollection
