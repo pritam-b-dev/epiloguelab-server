@@ -147,6 +147,15 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/api/my/lessons", verifyToken, async (req, res) => {
+      const query = { creatorId: req.user._id.toString() };
+      const result = await lessonsCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
     app.get("/api/featured-lessons", async (req, res) => {
       try {
         const result = await lessonsCollection
