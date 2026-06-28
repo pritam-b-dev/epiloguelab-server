@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -130,12 +130,6 @@ async function run() {
             .toArray();
           res.send(result);
         }
-
-        const lessons = await lessonsCollection
-          .find(query)
-          .sort({ createdAt: -1 })
-          .toArray();
-        res.send(lessons);
       } catch (error) {
         res.status(500).send({ message: "Error fetching lessons", error });
       }
