@@ -93,6 +93,14 @@ async function run() {
           query.creatorId = creatorId;
         }
 
+        //filter search
+        if (req.query.search) {
+          query.$or = [
+            { title: { $regex: req.query.search, $options: "i" } },
+            { description: { $regex: req.query.search, $options: "i" } },
+          ];
+        }
+
         const lessons = await lessonsCollection
           .find(query)
           .sort({ createdAt: -1 })
