@@ -71,6 +71,37 @@ async function run() {
       next();
     };
 
+    //api start
+
+    //lesson related api
+
+    app.get("/api/featured-lessons", async (req, res) => {
+      try {
+        const result = await lessonsCollection
+          .find({ isFeatured: true, visibility: "public" })
+          .limit(6)
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching featured lessons" });
+      }
+    });
+
+    app.get("/api/most-saved", async (req, res) => {
+      try {
+        const result = await lessonsCollection
+          .find({ visibility: "public" })
+          .sort({ likesCount: -1 })
+          .limit(6)
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching most saved lessons" });
+      }
+    });
+
+    //api ends
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
