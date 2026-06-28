@@ -251,6 +251,40 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/api/lessons/:id/like", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const userId = req.user._id.toString();
+      const query = { _id: new ObjectId(id) };
+
+      const lesson = await lessonsCollection.findOne(query);
+
+      if (!lesson) {
+        return res.status(404).send({ message: "Lesson not found" });
+      }
+
+      const alreadyLiked = lesson.likes?.includes(userId);
+      let updateDoc;
+      let updatedCount;
+
+      if (alreadyLiked) {
+        updateDoc = {
+          $pull: { likes: userId },
+          $inc: { likesCount: -1 },
+        };
+        updatedCount = (lesson.likesCount || 0) - 1;
+      } else {
+        updateDoc = {
+          $push: { likes: userId },
+          $inc: { likesCount: 1 },
+        };
+        updatedCount = (lesson.likesCount || 0) + 1;
+      }
+
+      await lessonsCollection.updateOne(query, updateDoc);
+
+      res.send({ liked: !alreadyLiked, likesCount: updatedCount });
+    });
+
     app.delete("/api/lessons/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
