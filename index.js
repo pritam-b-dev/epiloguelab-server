@@ -74,6 +74,34 @@ async function run() {
     //api start
 
     //lesson related api
+    app.get("/api/lessons", async (req, res) => {
+      try {
+        const query = { visibility: "public" };
+
+        if (req.query.category) {
+          query.category = req.query.category;
+        }
+        if (req.query.emotionalTone) {
+          query.emotionalTone = req.query.emotionalTone;
+        }
+        if (req.query.accessLevel) {
+          query.accessLevel = req.query.accessLevel;
+        }
+
+        const creatorId = req.query.companyId || req.query.creatorId;
+        if (creatorId) {
+          query.creatorId = creatorId;
+        }
+
+        const lessons = await lessonsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(lessons);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching lessons", error });
+      }
+    });
 
     app.get("/api/featured-lessons", async (req, res) => {
       try {
