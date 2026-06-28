@@ -242,6 +242,27 @@ async function run() {
       res.send(result);
     });
 
+    app.delete("/api/lessons/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const lesson = await lessonsCollection.findOne(query);
+
+      if (!lesson) {
+        return res.status(404).send({ message: "Lesson not found" });
+      }
+
+      if (
+        req.user._id.toString() !== lesson.creatorId &&
+        req.user.role !== "admin"
+      ) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+
+      const result = await lessonsCollection.deleteOne(query);
+      res.send(result);
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
