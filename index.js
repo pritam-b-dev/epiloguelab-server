@@ -141,6 +141,12 @@ async function run() {
       }
     });
 
+    app.get("/api/lessons/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await lessonsCollection.findOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
     app.get("/api/featured-lessons", async (req, res) => {
       try {
         const result = await lessonsCollection
