@@ -100,6 +100,29 @@ async function run() {
       }
     });
 
+    app.get("/api/top-contributors", async (req, res) => {
+      try {
+        const result = await lessonsCollection
+          .aggregate([
+            { $match: { visibility: "public" } },
+            {
+              $group: {
+                _id: "$creatorId",
+                name: { $first: "$creatorName" },
+                photo: { $first: "$creatorPhoto" },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { count: -1 } },
+            { $limit: 6 },
+          ])
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching top contributors" });
+      }
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
