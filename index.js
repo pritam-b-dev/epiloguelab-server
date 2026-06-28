@@ -285,6 +285,60 @@ async function run() {
       res.send({ liked: !alreadyLiked, likesCount: updatedCount });
     });
 
+    app.patch("/api/lessons/:id/visibility", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const lesson = await lessonsCollection.findOne(query);
+
+      if (!lesson) {
+        return res.status(404).send({ message: "Lesson not found" });
+      }
+
+      if (
+        req.user._id.toString() !== lesson.creatorId &&
+        req.user.role !== "admin"
+      ) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+
+      const result = await lessonsCollection.updateOne(query, {
+        $set: {
+          visibility: req.body.visibility,
+          updatedAt: new Date(),
+        },
+      });
+
+      res.send(result);
+    });
+
+    app.patch(
+      "/api/lessons/:id/feature",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const lesson = await lessonsCollection.findOne(query);
+
+        if (!lesson) {
+          return res.status(404).send({ message: "Lesson not found" });
+        }
+
+        const newFeaturedStatus = !lesson.isFeatured;
+
+        const result = await lessonsCollection.updateOne(query, {
+          $set: {
+            isFeatured: newFeaturedStatus,
+            updatedAt: new Date(),
+          },
+        });
+
+        res.send({ isFeatured: newFeaturedStatus });
+      },
+    );
+
     app.delete("/api/lessons/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
