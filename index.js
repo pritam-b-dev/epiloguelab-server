@@ -386,6 +386,46 @@ async function run() {
       res.send(result);
     });
 
+    //favourite related api
+
+    app.get("/api/favorites", verifyToken, async (req, res) => {
+      const { userId } = req.query;
+
+      if (req.user._id.toString() !== userId) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+
+      const favorites = await favoritesCollection.find({ userId }).toArray();
+      const lessonIds = favorites.map((f) => new ObjectId(f.lessonId));
+      const lessons = await lessonsCollection
+        .find({ _id: { $in: lessonIds } })
+        .toArray();
+
+      const result = favorites.map((fav) => ({
+        ...fav,
+        lesson: lessons.find((l) => l._id.toString() === fav.lessonId),
+      }));
+
+      res.send(result);
+    });
+
+    app.post("/api/favorites", verifyToken, async (req, res) => {
+      const { userId, lessonId } = req.body;
+      const result = await favoritesCollection.insertOne({
+        userId,
+        lessonId,
+        savedAt: new Date(),
+      });
+      res.send(result);
+    });
+
+    app.delete("/api/favorites/:lessonId", verifyToken, async (req, res) => {
+      const { lessonId } = req.params;
+      const { userId } = req.query;
+      const result = await favoritesCollection.deleteOne({ lessonId, userId });
+      res.send(result);
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
