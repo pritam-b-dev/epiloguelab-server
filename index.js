@@ -195,6 +195,25 @@ async function run() {
       }
     });
 
+    app.post("/api/lessons", verifyToken, async (req, res) => {
+      const lessonData = req.body;
+      const newLesson = {
+        ...lessonData,
+        creatorId: req.user._id.toString(),
+        creatorName: req.user.name,
+        creatorPhoto: req.user.photoURL || "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        likesCount: 0,
+        likes: [],
+        isFeatured: false,
+        isReviewed: false,
+      };
+
+      const result = await lessonsCollection.insertOne(newLesson);
+      res.send(result);
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
