@@ -147,7 +147,7 @@ async function run() {
     app.get(
       "/api/admin/lessons",
       verifyToken,
-      verifyAdmin,
+      // verifyAdmin,
       async (req, res) => {
         try {
           let query = {};
@@ -171,13 +171,13 @@ async function run() {
             .find(query)
             .sort({ createdAt: -1 })
             .toArray();
+
           res.send(result);
         } catch (error) {
           res.status(500).send({ message: "Error fetching lessons", error });
         }
       },
     );
-
     //user related api
 
     app.get("/api/users", verifyToken, verifyAdmin, async (req, res) => {
@@ -296,9 +296,24 @@ async function run() {
     });
 
     app.get("/api/lessons/:id", async (req, res) => {
-      const id = req.params.id;
-      const result = await lessonsCollection.findOne({ _id: new ObjectId(id) });
-      res.send(result);
+      try {
+        const id = req.params.id;
+
+        const query = ObjectId.isValid(id)
+          ? { _id: new ObjectId(id) }
+          : { _id: id };
+
+        const result = await lessonsCollection.findOne(query);
+
+        if (!result) {
+          return res.status(404).send({ message: "Lesson not found" });
+        }
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error in fetching lesson details:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
     });
 
     app.get("/api/my/lessons", verifyToken, async (req, res) => {
