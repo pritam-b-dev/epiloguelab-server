@@ -99,12 +99,20 @@ async function run() {
 
     // Middleware: Verify Admin
     const verifyAdmin = (req, res, next) => {
-      if (req.user?.role !== "admin") {
+      if (!req.user) {
+        return res
+          .status(401)
+          .send({ message: "unauthorized access - user not found" });
+      }
+
+      const userRole = req.user?.role?.trim().toLowerCase();
+
+      if (userRole !== "admin") {
         return res.status(403).send({ message: "forbidden access" });
       }
+
       next();
     };
-
     // Middleware: Verify User
     const verifyUser = (req, res, next) => {
       if (!req.user) {
@@ -147,33 +155,23 @@ async function run() {
     app.get(
       "/api/admin/lessons",
       verifyToken,
-      // verifyAdmin,
+      verifyAdmin,
       async (req, res) => {
         try {
+          console.log("📢 HIT RECEIVED ON /api/admin/lessons!");
+
           let query = {};
-
-          if (req.query.category) {
-            query.category = req.query.category;
-          }
-
-          if (req.query.visibility) {
-            query.visibility = req.query.visibility;
-          }
-
-          if (req.query.search) {
-            query.$or = [
-              { title: { $regex: req.query.search, $options: "i" } },
-              { creatorName: { $regex: req.query.search, $options: "i" } },
-            ];
-          }
 
           const result = await lessonsCollection
             .find(query)
             .sort({ createdAt: -1 })
             .toArray();
 
+          console.log("📦 DATABASE FOUND LESSONS COUNT:", result.length);
+
           res.send(result);
         } catch (error) {
+          console.log("❌ ERROR:", error);
           res.status(500).send({ message: "Error fetching lessons", error });
         }
       },
@@ -236,7 +234,7 @@ async function run() {
     //lesson related api
     app.get("/api/lessons", async (req, res) => {
       try {
-        const query = { visibility: "public" };
+        const query = { visibility: { $regex: /^public$/i } };
 
         //filter search
         if (req.query.search) {
