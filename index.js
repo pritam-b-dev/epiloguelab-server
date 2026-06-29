@@ -35,7 +35,7 @@ async function run() {
     const database = client.db("epiloguelab_db");
 
     const lessonsCollection = database.collection("lessons");
-    const usersCollection = database.collection("users");
+    const usersCollection = database.collection("user");
     const favoritesCollection = database.collection("favorites");
     const commentsCollection = database.collection("comments");
     const reportsCollection = database.collection("reports");
@@ -59,7 +59,6 @@ async function run() {
 
         const session = await sessionCollection.findOne({ token: token });
 
-        //
         if (!session) {
           console.log(
             "❌ Error: Token not found in MongoDB session collection!",
@@ -78,21 +77,10 @@ async function run() {
           ? new ObjectId(userIdStr)
           : userIdStr;
 
-        const altUsersCollection = database.collection("user");
-
-        let user = await usersCollection.findOne({ _id: idQuery });
+        const user = await usersCollection.findOne({ _id: idQuery });
 
         if (!user) {
-          console.log(
-            "⚠️ Not found in 'users' collection, trying 'user' collection...",
-          );
-          user = await altUsersCollection.findOne({ _id: idQuery });
-        }
-
-        if (!user) {
-          console.log(
-            "❌ Error: User completely missing from BOTH 'user' and 'users' collections!",
-          );
+          console.log("❌ Error: User not found in database!");
           return res.status(401).send({ message: "unauthorized access" });
         }
 
@@ -563,40 +551,83 @@ async function run() {
     //favourite related api
 
     app.get("/api/favorites", verifyToken, async (req, res) => {
-      const { userId } = req.query;
+      try {
+        const { userId } = req.query;
 
-      if (req.user._id.toString() !== userId) {
-        return res.status(403).send({ message: "Forbidden access" });
+        if (req.user._id.toString() !== userId) {
+          return res.status(403).send({ message: "Forbidden access" });
+        }
+
+        const favorites = await favoritesCollection.find({ userId }).toArray();
+
+        const lessonQueries = favorites.map((f) =>
+          ObjectId.isValid(f.lessonId) ? new ObjectId(f.lessonId) : f.lessonId,
+        );
+
+        const lessons = await lessonsCollection
+          .find({ _id: { $in: lessonQueries } })
+          .toArray();
+
+        const result = favorites.map((fav) => ({
+          ...fav,
+          lesson: lessons.find(
+            (l) => l._id.toString() === fav.lessonId.toString(),
+          ),
+        }));
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch favorites" });
       }
-
-      const favorites = await favoritesCollection.find({ userId }).toArray();
-      const lessonIds = favorites.map((f) => new ObjectId(f.lessonId));
-      const lessons = await lessonsCollection
-        .find({ _id: { $in: lessonIds } })
-        .toArray();
-
-      const result = favorites.map((fav) => ({
-        ...fav,
-        lesson: lessons.find((l) => l._id.toString() === fav.lessonId),
-      }));
-
-      res.send(result);
     });
 
     app.post("/api/favorites", verifyToken, async (req, res) => {
-      const { userId, lessonId } = req.body;
-      const result = await favoritesCollection.insertOne({
-        userId,
-        lessonId,
-        savedAt: new Date(),
-      });
-      res.send(result);
+      try {
+        const { lessonId } = req.body;
+
+        const userId = req.user._id.toString();
+
+        if (!lessonId) {
+          return res
+            .status(400)
+            .send({ success: false, message: "Lesson ID is required" });
+        }
+
+        const existingFavorite = await favoritesCollection.findOne({
+          userId: userId,
+          lessonId: lessonId,
+        });
+
+        if (existingFavorite) {
+          return res
+            .status(400)
+            .send({ success: false, message: "Already in favorites!" });
+        }
+
+        const result = await favoritesCollection.insertOne({
+          userId,
+          lessonId,
+          savedAt: new Date(),
+        });
+
+        console.log(
+          `✅ Lesson ${lessonId} successfully saved for user: ${req.user.email}`,
+        );
+
+        res.send({ success: true, insertedId: result.insertedId });
+      } catch (error) {
+        console.error("Error saving favorite:", error);
+        res
+          .status(500)
+          .send({ success: false, message: "Internal server error" });
+      }
     });
 
     app.delete("/api/favorites/:lessonId", verifyToken, async (req, res) => {
-      const { lessonId } = req.params;
-      const { userId } = req.query;
-      const result = await favoritesCollection.deleteOne({ lessonId, userId });
+      const { lessonId } = req.body;
+      const userId = req.user._id.toString();
+
+      const result = await favoritesCollection.deleteOne({ userId, lessonId });
       res.send(result);
     });
 
@@ -684,31 +715,41 @@ async function run() {
     app.post("/api/payment-success", async (req, res) => {
       try {
         const { sessionId } = req.body;
+        if (!sessionId)
+          return res
+            .status(400)
+            .send({ success: false, message: "Missing sessionId" });
 
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
         if (session.payment_status === "paid") {
-          const email = session.customer_details.email;
+          const email = session.customer_details?.email;
+          if (!email)
+            return res
+              .status(400)
+              .send({ success: false, message: "Email not found" });
 
-          await usersCollection.updateOne(
-            { email: email },
-            { $set: { isPremium: true } },
+          const updateResult = await usersCollection.updateOne(
+            { email },
+            { $set: { isPremium: true, role: "premium" } },
           );
 
-          res.send({ success: true, isPremium: true });
-        } else {
-          res
-            .status(400)
-            .send({ success: false, message: "Payment not completed" });
+          if (updateResult.modifiedCount > 0 || updateResult.matchedCount > 0) {
+            return res.send({ success: true, isPremium: true });
+          }
+          return res
+            .status(404)
+            .send({ success: false, message: "User email mismatch" });
         }
+        res
+          .status(400)
+          .send({ success: false, message: "Payment not completed" });
       } catch (error) {
-        console.error("Payment Success Error:", error);
         res
           .status(500)
           .send({ success: false, message: "Failed to update premium status" });
       }
     });
-
     //api ends
 
     await client.db("admin").command({ ping: 1 });
