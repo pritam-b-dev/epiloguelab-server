@@ -594,6 +594,34 @@ async function run() {
       }
     });
 
+    app.post("/api/payment-success", async (req, res) => {
+      try {
+        const { sessionId } = req.body;
+
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        if (session.payment_status === "paid") {
+          const email = session.customer_details.email;
+
+          await usersCollection.updateOne(
+            { email: email },
+            { $set: { isPremium: true } },
+          );
+
+          res.send({ success: true, isPremium: true });
+        } else {
+          res
+            .status(400)
+            .send({ success: false, message: "Payment not completed" });
+        }
+      } catch (error) {
+        console.error("Payment Success Error:", error);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to update premium status" });
+      }
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
