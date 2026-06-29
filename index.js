@@ -1,6 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const Stripe = require("stripe");
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
 require("dotenv").config();
 
 const app = express();
@@ -72,6 +75,34 @@ async function run() {
     };
 
     //api start
+    //admin related api
+    app.get("/api/admin/stats", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const stats = {
+          totalUsers: await usersCollection.countDocuments(),
+          totalLessons: await lessonsCollection.countDocuments({
+            visibility: "public",
+          }),
+          totalReports: await reportsCollection.countDocuments(),
+          premiumUsers: await usersCollection.countDocuments({
+            isPremium: true,
+          }),
+          todayLessons: await lessonsCollection.countDocuments({
+            createdAt: { $gte: today },
+          }),
+          featuredLessons: await lessonsCollection.countDocuments({
+            isFeatured: true,
+          }),
+        };
+
+        res.send(stats);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching admin stats", error });
+      }
+    });
 
     //user related api
 
@@ -537,32 +568,29 @@ async function run() {
       },
     );
 
-    //admin related api
-    app.get("/api/admin/stats", verifyToken, verifyAdmin, async (req, res) => {
+    // payment related api
+    // Stripe Setup
+
+    app.post("/api/create-checkout-session", verifyToken, async (req, res) => {
       try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const session = await stripe.checkout.sessions.create({
+          customer_email: req.user.email,
+          line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+          mode: "payment",
+          metadata: {
+            userId: req.user._id.toString(),
+            userEmail: req.user.email,
+          },
+          success_url:
+            process.env.CLIENT_URL +
+            "/pricing/success?session_id={CHECKOUT_SESSION_ID}",
+          cancel_url: process.env.CLIENT_URL + "/pricing/cancel",
+        });
 
-        const stats = {
-          totalUsers: await usersCollection.countDocuments(),
-          totalLessons: await lessonsCollection.countDocuments({
-            visibility: "public",
-          }),
-          totalReports: await reportsCollection.countDocuments(),
-          premiumUsers: await usersCollection.countDocuments({
-            isPremium: true,
-          }),
-          todayLessons: await lessonsCollection.countDocuments({
-            createdAt: { $gte: today },
-          }),
-          featuredLessons: await lessonsCollection.countDocuments({
-            isFeatured: true,
-          }),
-        };
-
-        res.send(stats);
+        res.json({ url: session.url });
       } catch (error) {
-        res.status(500).send({ message: "Error fetching admin stats", error });
+        console.error("Stripe Error:", error);
+        res.status(500).send({ message: "Failed to create checkout session" });
       }
     });
 
