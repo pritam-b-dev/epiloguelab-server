@@ -779,7 +779,3 @@ run().catch(console.dir);
 app.get("/", (req, res) => {
   res.send("Digital Life Lessons Server Running");
 });
-
-app.listen(port, () => {
-  console.log(`epiloguelab server listening on port ${port}`);
-});
