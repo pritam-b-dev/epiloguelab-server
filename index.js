@@ -73,6 +73,61 @@ async function run() {
 
     //api start
 
+    //user related api
+
+    app.get("/api/users", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const users = await usersCollection.find().toArray();
+
+        const usersWithCount = await Promise.all(
+          users.map(async (user) => {
+            const count = await lessonsCollection.countDocuments({
+              creatorId: user._id.toString(),
+            });
+            return { ...user, lessonCount: count };
+          }),
+        );
+
+        res.send(usersWithCount);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching users", error });
+      }
+    });
+
+    app.patch(
+      "/api/users/:id/role",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { role } = req.body;
+
+          const result = await usersCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role: role } },
+          );
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error updating role", error });
+        }
+      },
+    );
+
+    app.patch("/api/users/profile", verifyToken, async (req, res) => {
+      try {
+        const { name, photoURL } = req.body;
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(req.user._id) },
+          { $set: { name: name, photoURL: photoURL } },
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error updating profile", error });
+      }
+    });
+
     //lesson related api
     app.get("/api/lessons", async (req, res) => {
       try {
@@ -357,27 +412,34 @@ async function run() {
     //comment related api
 
     app.get("/api/comments", async (req, res) => {
-      const { lessonId } = req.query;
-      const result = await commentsCollection
-        .find({ lessonId })
-        .sort({ createdAt: -1 })
-        .toArray();
-      res.send(result);
+      try {
+        const { lessonId } = req.query;
+        const comments = await commentsCollection
+          .find({ lessonId })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(comments);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch comments", error });
+      }
     });
 
     app.post("/api/comments", verifyToken, async (req, res) => {
-      const { lessonId, text } = req.body;
-      const newComment = {
-        lessonId,
-        text,
-        userId: req.user._id.toString(),
-        userName: req.user.name,
-        userPhoto: req.user.photoURL || "",
-        createdAt: new Date(),
-      };
+      try {
+        const newComment = {
+          lessonId: req.body.lessonId,
+          text: req.body.text,
+          userId: req.user._id.toString(),
+          userName: req.user.name,
+          userPhoto: req.user.photoURL || "",
+          createdAt: new Date(),
+        };
 
-      const result = await commentsCollection.insertOne(newComment);
-      res.send(result);
+        const result = await commentsCollection.insertOne(newComment);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to post comment", error });
+      }
     });
 
     //favourite related api
@@ -420,6 +482,60 @@ async function run() {
       res.send(result);
     });
 
+    //report related api
+
+    app.post("/api/reports", verifyToken, async (req, res) => {
+      try {
+        const { lessonId, reason } = req.body;
+        const newReport = {
+          lessonId,
+          reporterUserId: req.user._id.toString(),
+          reporterEmail: req.user.email,
+          reason,
+          timestamp: new Date(),
+        };
+
+        const result = await reportsCollection.insertOne(newReport);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to submit report" });
+      }
+    });
+
+    app.get("/api/reports", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const allReports = await reportsCollection.find().toArray();
+
+        const groupedReports = allReports.reduce((acc, report) => {
+          const { lessonId } = report;
+          if (!acc[lessonId]) {
+            acc[lessonId] = { lessonId, count: 0, reports: [] };
+          }
+          acc[lessonId].count += 1;
+          acc[lessonId].reports.push(report);
+          return acc;
+        }, {});
+
+        res.send(Object.values(groupedReports));
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch reports" });
+      }
+    });
+
+    app.delete(
+      "/api/reports/lesson/:lessonId",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { lessonId } = req.params;
+          const result = await reportsCollection.deleteMany({ lessonId });
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Failed to delete reports" });
+        }
+      },
+    );
     //api ends
 
     await client.db("admin").command({ ping: 1 });
