@@ -29,6 +29,8 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    await client.connect();
+
     // Database and Collections
     const database = client.db("epiloguelab_db");
 
@@ -773,13 +775,11 @@ async function run() {
 }
 
 run();
-try {
-  await client.connect();
-  console.log("✅ MongoDB Connected");
-} catch (err) {
-  console.error("❌ MongoDB Connection Failed:", err);
-}
 
 app.get("/", (req, res) => {
-  res.send("Digital Life Lessons Server Running");
+  res.send("epilogue is running");
+});
+
+app.listen(port, () => {
+  console.log(`epiloguelab server listening on port ${port}`);
 });
