@@ -536,6 +536,36 @@ async function run() {
         }
       },
     );
+
+    //admin related api
+    app.get("/api/admin/stats", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const stats = {
+          totalUsers: await usersCollection.countDocuments(),
+          totalLessons: await lessonsCollection.countDocuments({
+            visibility: "public",
+          }),
+          totalReports: await reportsCollection.countDocuments(),
+          premiumUsers: await usersCollection.countDocuments({
+            isPremium: true,
+          }),
+          todayLessons: await lessonsCollection.countDocuments({
+            createdAt: { $gte: today },
+          }),
+          featuredLessons: await lessonsCollection.countDocuments({
+            isFeatured: true,
+          }),
+        };
+
+        res.send(stats);
+      } catch (error) {
+        res.status(500).send({ message: "Error fetching admin stats", error });
+      }
+    });
+
     //api ends
 
     await client.db("admin").command({ ping: 1 });
