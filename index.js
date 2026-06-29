@@ -76,6 +76,7 @@ async function run() {
 
     //api start
     //admin related api
+
     app.get("/api/admin/stats", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const today = new Date();
@@ -103,6 +104,40 @@ async function run() {
         res.status(500).send({ message: "Error fetching admin stats", error });
       }
     });
+
+    app.get(
+      "/api/admin/lessons",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          let query = {};
+
+          if (req.query.category) {
+            query.category = req.query.category;
+          }
+
+          if (req.query.visibility) {
+            query.visibility = req.query.visibility;
+          }
+
+          if (req.query.search) {
+            query.$or = [
+              { title: { $regex: req.query.search, $options: "i" } },
+              { creatorName: { $regex: req.query.search, $options: "i" } },
+            ];
+          }
+
+          const result = await lessonsCollection
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Error fetching lessons", error });
+        }
+      },
+    );
 
     //user related api
 
