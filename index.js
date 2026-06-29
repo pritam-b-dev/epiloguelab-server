@@ -5,13 +5,13 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-const corsOptions = {
-  origin: ["http://localhost:3000", process.env.CLIENT_URL],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-};
-
-app.use(cors(corsOptions));
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.use(express.json());
 const Stripe = require("stripe");
@@ -42,25 +42,71 @@ async function run() {
     const sessionCollection = database.collection("session");
 
     // Middleware: Verify Token
+
     const verifyToken = async (req, res, next) => {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).send({ message: "unauthorized access" });
-      }
-      const token = authHeader.split(" ")[1];
+      try {
+        const authHeader = req.headers.authorization;
 
-      const session = await sessionCollection.findOne({ token: token });
-      if (!session) {
-        return res.status(401).send({ message: "unauthorized access" });
-      }
+        console.log("=== VERIFY TOKEN START ===");
+        console.log("Incoming Auth Header:", authHeader);
 
-      const user = await usersCollection.findOne({ _id: session.userId });
-      if (!user) {
-        return res.status(401).send({ message: "unauthorized access" });
-      }
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          console.log("❌ Error: No Bearer token in header");
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+        const token = authHeader.split(" ")[1];
+        console.log("Extracted Token from Frontend:", token);
 
-      req.user = user;
-      next();
+        const session = await sessionCollection.findOne({ token: token });
+
+        //
+        if (!session) {
+          console.log(
+            "❌ Error: Token not found in MongoDB session collection!",
+          );
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+
+        console.log("✅ Session Found in DB. User ID:", session.userId);
+
+        let rawUserId = session.userId;
+        let userIdStr = rawUserId
+          .toString()
+          .replace(/ObjectId\(['"](.+)['"]\)/, "$1");
+
+        const idQuery = ObjectId.isValid(userIdStr)
+          ? new ObjectId(userIdStr)
+          : userIdStr;
+
+        const altUsersCollection = database.collection("user");
+
+        let user = await usersCollection.findOne({ _id: idQuery });
+
+        if (!user) {
+          console.log(
+            "⚠️ Not found in 'users' collection, trying 'user' collection...",
+          );
+          user = await altUsersCollection.findOne({ _id: idQuery });
+        }
+
+        if (!user) {
+          console.log(
+            "❌ Error: User completely missing from BOTH 'user' and 'users' collections!",
+          );
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+
+        console.log("✅ User Verified Successfully:", user.email);
+        console.log("=== VERIFY TOKEN END ===");
+
+        req.user = user;
+        next();
+      } catch (error) {
+        console.error("Token verification error:", error);
+        return res
+          .status(500)
+          .send({ message: "Internal server error in verification" });
+      }
     };
 
     // Middleware: Verify Admin
@@ -268,6 +314,7 @@ async function run() {
     });
 
     app.get("/api/my/lessons", verifyToken, async (req, res) => {
+      console.log("req.user._id:", req.user._id);
       const query = { creatorId: req.user._id.toString() };
       const result = await lessonsCollection
         .find(query)
@@ -616,7 +663,7 @@ async function run() {
         const session = await stripe.checkout.sessions.create({
           customer_email: req.user.email,
           line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-          mode: "payment",
+          mode: "subscription",
           metadata: {
             userId: req.user._id.toString(),
             userEmail: req.user.email,
